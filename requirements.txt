@@ -1,0 +1,12 @@
+pyautogui==0.9.54
+opencv-python==4.10.0.84
+# Compatível com Python 3.9/3.10/3.11/3.12
+numpy==1.26.4
+mss==10.0.0
+Pillow==11.0.0
+pydirectinput==1.0.4
+pygetwindow==0.0.9
+pydantic==2.10.6
+python-dotenv==1.0.1
+openai==1.58.1
+PyYAML==6.0.2

@@ -1,0 +1,72 @@
+window_title: "Ryujinx"
+loop_interval_ms: 500
+capture:
+  monitor_index: 1
+
+actions:
+  A: z
+  B: x
+  X: c
+  Y: v
+  Plus: plus
+  Minus: minus
+  DpadUp: up
+  DpadDown: down
+  DpadLeft: left
+  DpadRight: right
+  LStickUp: w
+  LStickDown: s
+  LStickLeft: a
+  LStickRight: d
+  L: e
+  R: u
+  ZL: q
+  ZR: o
+
+ai:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  temperature: 0.1
+  max_tokens: 200
+  # Evita spam de chamadas quando houver erro/quota (segundos)
+  cooldown_seconds_after_error: 120
+  # Número de falhas seguidas antes de entrar em cooldown
+  max_consecutive_failures: 3
+
+strategy:
+  default_mode: "farm_xp"
+  use_ai_planner: false
+  anti_stuck_enabled: true
+  # Diferença média mínima entre frames (0-255). Menor = mais sensível.
+  stuck_diff_threshold: 1.2
+  # Quantidade de loops quase idênticos antes de considerar travado.
+  stuck_max_still_frames: 6
+  # Tamanho usado para comparar frames (mais baixo = mais leve).
+  stuck_preview_size: [160, 90]
+  # Quantas ações do fallback executar por loop.
+  fallback_chunk_size: 2
+  # Política local que aprende com recompensa por mudança de frame.
+  local_learning_enabled: true
+  learning_rate: 0.25
+  exploration_rate: 0.35
+  exploration_decay: 0.995
+  exploration_min: 0.05
+  learning_action_duration_ms: 500
+  learning_actions: [LStickUp, LStickLeft, LStickRight, LStickDown, A, B]
+  # Script de recuperação quando detectar encravamento.
+  recovery_script:
+    - action: B
+      duration_ms: 250
+    - action: LStickDown
+      duration_ms: 500
+    - action: A
+      duration_ms: 200
+  fallback_script:
+    - action: LStickUp
+      duration_ms: 800
+    - action: A
+      duration_ms: 200
+    - action: LStickLeft
+      duration_ms: 600
+    - action: A
+      duration_ms: 200
