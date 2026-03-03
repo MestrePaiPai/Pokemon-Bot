@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from io import BytesIO
@@ -87,7 +88,20 @@ class AIPlanner:
         self.model = config["ai"]["model"]
         self.temperature = float(config["ai"].get("temperature", 0.1))
         self.max_tokens = int(config["ai"].get("max_tokens", 200))
-        self.client = OpenAI() if self.enabled and self.provider == "openai" else None
+        self.client = self._build_client()
+
+    def _build_client(self) -> OpenAI | None:
+        if not self.enabled or self.provider != "openai":
+            return None
+
+        if not os.getenv("OPENAI_API_KEY"):
+            LOGGER.warning(
+                "OPENAI_API_KEY não definido; planner de IA desativado. "
+                "Defina a variável de ambiente (ou .env) para habilitar IA."
+            )
+            return None
+
+        return OpenAI()
 
     @staticmethod
     def _image_to_data_url(image: Image.Image) -> str:

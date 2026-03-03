@@ -117,3 +117,27 @@ path = "C:\\Users\\ricar\\Downloads\\Pokemon"
 ```
 
 No projeto, prefira passar caminhos por argumento (`--config`) em vez de hardcode no código Python.
+
+### Erro comum (OPENAI_API_KEY ausente)
+
+Se aparecer `openai.OpenAIError: The api_key client option must be set...`, o planner com IA está ativo mas sem chave configurada.
+
+Como resolver:
+
+1. Crie (ou edite) um arquivo `.env` na raiz do projeto.
+2. Adicione sua chave:
+
+```env
+OPENAI_API_KEY=sk-...
+```
+
+3. Rode o bot novamente.
+
+Se você não quiser usar IA, no `config/config.yaml` defina:
+
+```yaml
+strategy:
+  use_ai_planner: false
+```
+
+Com isso o bot funciona só com as heurísticas/fallback (sem OpenAI).
