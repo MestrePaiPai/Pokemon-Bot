@@ -54,11 +54,13 @@ cp config/config.example.yaml config/config.yaml
    - Triggers: L=E, R=U, ZL=Q, ZR=O
 
 3. (Opcional) IA com OpenAI:
-   - Crie `.env` com:
+   - Copie `.env.example` para `.env` e preencha sua chave:
 
 ```env
-OPENAI_API_KEY=sua_chave_aqui
+OPENAI_API_KEY=sk-...
 ```
+
+> 🔒 Segurança: nunca publique sua chave no GitHub/chat. O projeto ignora `.env` automaticamente via `.gitignore`.
 
 ## Uso
 
@@ -124,7 +126,7 @@ Se aparecer `openai.OpenAIError: The api_key client option must be set...`, o pl
 
 Como resolver:
 
-1. Crie (ou edite) um arquivo `.env` na raiz do projeto.
+1. Crie (ou edite) um arquivo `.env` na raiz do projeto (você pode copiar de `.env.example`).
 2. Adicione sua chave:
 
 ```env
