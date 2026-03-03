@@ -28,6 +28,10 @@ ai:
   model: "gpt-4o-mini"
   temperature: 0.1
   max_tokens: 200
+  # Evita spam de chamadas quando houver erro/quota (segundos)
+  cooldown_seconds_after_error: 120
+  # Número de falhas seguidas antes de entrar em cooldown
+  max_consecutive_failures: 3
 
 strategy:
   default_mode: "farm_xp"

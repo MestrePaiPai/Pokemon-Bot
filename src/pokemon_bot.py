@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -132,6 +133,10 @@ class AIPlanner:
         self.model = config["ai"]["model"]
         self.temperature = float(config["ai"].get("temperature", 0.1))
         self.max_tokens = int(config["ai"].get("max_tokens", 200))
+        self.cooldown_seconds = int(config["ai"].get("cooldown_seconds_after_error", 120))
+        self.max_consecutive_failures = int(config["ai"].get("max_consecutive_failures", 3))
+        self._cooldown_until = 0.0
+        self._consecutive_failures = 0
         self.client = self._build_client()
 
     def _build_client(self) -> OpenAI | None:
@@ -147,6 +152,27 @@ class AIPlanner:
 
         return OpenAI()
 
+    def _is_insufficient_quota_error(self, exc: Exception) -> bool:
+        code = getattr(exc, "code", None)
+        if code == "insufficient_quota":
+            return True
+
+        body = getattr(exc, "body", None)
+        if isinstance(body, Mapping):
+            err = body.get("error")
+            if isinstance(err, Mapping) and err.get("code") == "insufficient_quota":
+                return True
+
+        return "insufficient_quota" in str(exc)
+
+    def _enter_cooldown(self, reason: str) -> None:
+        self._cooldown_until = time.time() + max(self.cooldown_seconds, 10)
+        LOGGER.warning(
+            "Planner IA em cooldown por %ss (%s). Usando fallback local.",
+            self.cooldown_seconds,
+            reason,
+        )
+
     @staticmethod
     def _image_to_data_url(image: Image.Image) -> str:
         buf = BytesIO()
@@ -156,6 +182,10 @@ class AIPlanner:
 
     def next_actions(self, image: Image.Image, mode: str, state: str) -> list[PlannedAction]:
         if not self.enabled or not self.client:
+            return []
+
+        now = time.time()
+        if now < self._cooldown_until:
             return []
 
         prompt = (
@@ -169,22 +199,34 @@ class AIPlanner:
         )
 
         data_url = self._image_to_data_url(image)
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": "Você é um planner de ações curtas para automação de jogo."},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                },
-            ],
-        )
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "Você é um planner de ações curtas para automação de jogo."},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    },
+                ],
+            )
+            self._consecutive_failures = 0
+        except Exception as exc:
+            self._consecutive_failures += 1
+            if self._is_insufficient_quota_error(exc):
+                self._enter_cooldown("quota insuficiente")
+                return []
+
+            if self._consecutive_failures >= self.max_consecutive_failures:
+                self._enter_cooldown("falhas consecutivas")
+                self._consecutive_failures = 0
+            raise
 
         text = resp.choices[0].message.content or "{}"
         payload = json.loads(text)
@@ -264,13 +306,16 @@ class PokemonBot:
 
         interval = self.config["loop_interval_ms"] / 1000
         LOGGER.info("Bot iniciado. Pressione Ctrl+C para parar.")
-        while True:
-            frame = self.capture.grab()
-            actions = self.decide_actions(frame)
-            for action in actions:
-                self.input.press(action.action, action.duration_ms)
-                time.sleep(0.03)
-            time.sleep(interval)
+        try:
+            while True:
+                frame = self.capture.grab()
+                actions = self.decide_actions(frame)
+                for action in actions:
+                    self.input.press(action.action, action.duration_ms)
+                    time.sleep(0.03)
+                time.sleep(interval)
+        except KeyboardInterrupt:
+            LOGGER.info("Bot parado pelo utilizador (Ctrl+C).")
 
 
 def load_config(path: Path) -> dict[str, Any]:

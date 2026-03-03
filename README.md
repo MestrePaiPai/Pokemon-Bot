@@ -77,7 +77,7 @@ python src/pokemon_bot.py --config config/config.yaml --log-level INFO
 
 - O bot tenta focar a janela com título contendo `Ryujinx`.
 - Loop padrão: 500 ms.
-- Pare com `Ctrl + C`.
+- Pare com `Ctrl + C` (agora encerra sem traceback feio no terminal).
 
 ## Como funciona
 
@@ -151,6 +151,10 @@ strategy:
 ```
 
 Com isso o bot funciona só com as heurísticas/fallback (sem OpenAI).
+
+Se aparecer `429 insufficient_quota`, não é bug do bot: é limite/quota da conta OpenAI.
+Nesta versão, o planner entra em cooldown automático para evitar spam de requests e segue no fallback local.
+Você também pode desligar totalmente a IA (`strategy.use_ai_planner: false`) para rodar 100% offline.
 
 
 ### Bot encrava com frequência
