@@ -86,3 +86,34 @@ python src/pokemon_bot.py --config config/config.yaml --log-level INFO
 - Treinar classificador de tela (menu/luta/mapa) com dataset.
 - Adicionar "anti-stuck" (detecção de repetição de frames).
 - Criar perfis por jogo (Scarlet/Violet, Sword/Shield, etc.).
+
+## Troubleshooting
+
+### Erro comum (numpy)
+
+Se aparecer `No matching distribution found for numpy==2.1.3`, você provavelmente está usando um ZIP/snapshot antigo do projeto. Baixe novamente a versão atual e reinstale:
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Erro comum (unicodeescape no Windows)
+
+Se aparecer `SyntaxError: (unicode error) 'unicodeescape' codec can't decode ...`, isso acontece quando um caminho Windows com `\` é usado dentro de string Python, por exemplo:
+
+```python
+path = "C:\Users\ricar\Downloads\Pokemon"
+```
+
+Nesse caso, `\U` é interpretado como início de escape Unicode. Use uma destas opções:
+
+```python
+path = r"C:\Users\ricar\Downloads\Pokemon"   # raw string
+# ou
+path = "C:/Users/ricar/Downloads/Pokemon"
+# ou
+path = "C:\\Users\\ricar\\Downloads\\Pokemon"
+```
+
+No projeto, prefira passar caminhos por argumento (`--config`) em vez de hardcode no código Python.
