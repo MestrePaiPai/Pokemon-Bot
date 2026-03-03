@@ -4,7 +4,8 @@ Bot em Python para automatizar Pokémon no **Ryujinx** com:
 - captura de tela;
 - heurísticas simples de estado (overworld / battle / menu);
 - planner opcional com IA (OpenAI Vision) para decidir próximas ações;
-- anti-stuck para detectar tela parada e executar recuperação automática.
+- anti-stuck para detectar tela parada e executar recuperação automática;
+- política local de aprendizagem online (sem cloud) para variar ações no overworld.
 
 > ⚠️ Uso por sua conta e risco. Automação pode violar regras de alguns jogos/serviços.
 
@@ -54,7 +55,7 @@ cp config/config.example.yaml config/config.yaml
    - LStick: W/A/S/D
    - Triggers: L=E, R=U, ZL=Q, ZR=O
 
-3. (Opcional) IA com OpenAI:
+3. (Opcional) IA com OpenAI (vem desligada por padrão no exemplo para evitar erro de quota):
    - Copie `.env.example` para `.env` e preencha sua chave:
 
 ```env
@@ -84,8 +85,9 @@ python src/pokemon_bot.py --config config/config.yaml --log-level INFO
 1. Captura a tela do monitor definido.
 2. Classifica estado por visão computacional leve.
 3. Se IA estiver ativa, pede até 3 ações curtas para o modelo.
-4. Detecta encravamento por similaridade entre frames e executa `recovery_script` automaticamente.
-5. Se IA falhar/desligada, usa fallback script + regras simples:
+4. Se IA estiver desligada/indisponível, usa uma política local que aprende online com recompensa baseada em mudança de frame.
+5. Detecta encravamento por similaridade entre frames e executa `recovery_script` automaticamente.
+6. Se aprendizagem local estiver desligada, usa fallback script + regras simples:
    - `battle`: confirma com `A`
    - `menu`: volta com `B`
    - `overworld`: script de movimento configurado
@@ -96,6 +98,26 @@ python src/pokemon_bot.py --config config/config.yaml --log-level INFO
 - Treinar classificador de tela (menu/luta/mapa) com dataset.
 - Adicionar "anti-stuck" (detecção de repetição de frames).
 - Criar perfis por jogo (Scarlet/Violet, Sword/Shield, etc.).
+
+
+### Modelo que aprende (local)
+
+Para evitar ficar preso no padrão `LStickUp -> A -> LStickLeft -> A`, o bot agora pode usar uma política local que aprende durante a execução (sem API).
+
+Configuração no `config/config.yaml`:
+
+```yaml
+strategy:
+  local_learning_enabled: true
+  learning_rate: 0.25
+  exploration_rate: 0.35
+  exploration_decay: 0.995
+  exploration_min: 0.05
+  learning_action_duration_ms: 500
+  learning_actions: [LStickUp, LStickLeft, LStickRight, LStickDown, A, B]
+```
+
+Nos logs você verá linhas como `Learning local: action=... reward=... q=...`, mostrando o ajuste do modelo ao longo do tempo.
 
 ## Troubleshooting
 

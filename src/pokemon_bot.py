@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import os
+import random
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -124,6 +125,88 @@ class StuckDetector:
             return True
 
         return False
+
+
+class LocalAdaptivePolicy:
+    def __init__(self, config: dict[str, Any]) -> None:
+        strategy = config.get("strategy", {})
+        self.enabled = bool(strategy.get("local_learning_enabled", True))
+        self.learning_rate = float(strategy.get("learning_rate", 0.25))
+        self.epsilon = float(strategy.get("exploration_rate", 0.35))
+        self.epsilon_decay = float(strategy.get("exploration_decay", 0.995))
+        self.epsilon_min = float(strategy.get("exploration_min", 0.05))
+        self.action_duration_ms = int(strategy.get("learning_action_duration_ms", 500))
+
+        configured_actions = strategy.get("learning_actions", [])
+        if configured_actions:
+            self.actions = [str(action) for action in configured_actions]
+        else:
+            fallback_script = strategy.get("fallback_script", [])
+            fallback_actions = [step.get("action") for step in fallback_script if isinstance(step, dict)]
+            unique_fallback = [action for action in fallback_actions if isinstance(action, str)]
+            self.actions = list(dict.fromkeys(unique_fallback))
+
+        if not self.actions:
+            self.actions = ["LStickUp", "LStickLeft", "LStickRight", "LStickDown", "A", "B"]
+
+        self.q_values = {action: 0.0 for action in self.actions}
+        self.last_action: str | None = None
+
+    def choose_actions(self) -> list[PlannedAction]:
+        if not self.enabled:
+            return []
+
+        if random.random() < self.epsilon:
+            action = random.choice(self.actions)
+        else:
+            action = max(self.actions, key=lambda item: self.q_values.get(item, 0.0))
+
+        self.last_action = action
+        return [PlannedAction(action, self.action_duration_ms)]
+
+    @staticmethod
+    def _frame_diff(before: Image.Image, after: Image.Image) -> float:
+        before_gray = cv2.cvtColor(np.array(before), cv2.COLOR_RGB2GRAY)
+        after_gray = cv2.cvtColor(np.array(after), cv2.COLOR_RGB2GRAY)
+        before_small = cv2.resize(before_gray, (160, 90), interpolation=cv2.INTER_AREA)
+        after_small = cv2.resize(after_gray, (160, 90), interpolation=cv2.INTER_AREA)
+        return float(np.mean(cv2.absdiff(before_small, after_small)))
+
+    def observe_transition(self, before: Image.Image, after: Image.Image) -> None:
+        if not self.enabled or not self.last_action:
+            return
+
+        diff = self._frame_diff(before, after)
+        reward = (diff / 10.0) - 0.2
+        reward = max(min(reward, 2.0), -1.0)
+
+        current_q = self.q_values.get(self.last_action, 0.0)
+        updated_q = current_q + self.learning_rate * (reward - current_q)
+        self.q_values[self.last_action] = updated_q
+
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        LOGGER.info(
+            "Learning local: action=%s diff=%.3f reward=%.3f q=%.3f eps=%.3f",
+            self.last_action,
+            diff,
+            reward,
+            updated_q,
+            self.epsilon,
+        )
+
+    def penalize_last_action(self, penalty: float = -1.0) -> None:
+        if not self.enabled or not self.last_action:
+            return
+
+        current_q = self.q_values.get(self.last_action, 0.0)
+        updated_q = current_q + self.learning_rate * (penalty - current_q)
+        self.q_values[self.last_action] = updated_q
+        LOGGER.info(
+            "Learning local: penalidade action=%s penalty=%.3f q=%.3f",
+            self.last_action,
+            penalty,
+            updated_q,
+        )
 
 
 class AIPlanner:
@@ -252,6 +335,7 @@ class PokemonBot:
         self.recovery = [PlannedAction(**step) for step in recovery_script]
         self.fallback_chunk_size = int(config["strategy"].get("fallback_chunk_size", 2))
         self.fallback_cursor = 0
+        self.local_policy = LocalAdaptivePolicy(config)
 
     def focus_window(self, title: str) -> bool:
         matches = gw.getWindowsWithTitle(title)
@@ -278,9 +362,10 @@ class PokemonBot:
             self.fallback_cursor += 1
         return actions
 
-    def decide_actions(self, frame: Image.Image) -> list[PlannedAction]:
+    def decide_actions(self, frame: Image.Image) -> tuple[list[PlannedAction], str]:
         if self.stuck_detector.is_stuck(frame):
-            return self.recovery
+            self.local_policy.penalize_last_action(-1.0)
+            return self.recovery, "recovery"
 
         state = self.heuristics.classify_state(frame)
         LOGGER.info("Estado detectado: %s", state)
@@ -292,13 +377,17 @@ class PokemonBot:
             LOGGER.warning("Planner IA falhou, usando fallback: %s", exc)
 
         if ai_actions:
-            return ai_actions
+            return ai_actions, "ai"
 
         if state == "battle":
-            return [PlannedAction("A", 250), PlannedAction("A", 250)]
+            return [PlannedAction("A", 250), PlannedAction("A", 250)], "battle"
         if state == "menu":
-            return [PlannedAction("B", 200), PlannedAction("B", 200)]
-        return self._next_fallback_actions()
+            return [PlannedAction("B", 200), PlannedAction("B", 200)], "menu"
+
+        learned_actions = self.local_policy.choose_actions()
+        if learned_actions:
+            return learned_actions, "adaptive"
+        return self._next_fallback_actions(), "fallback"
 
     def run(self) -> None:
         if not self.focus_window(self.config["window_title"]):
@@ -309,10 +398,15 @@ class PokemonBot:
         try:
             while True:
                 frame = self.capture.grab()
-                actions = self.decide_actions(frame)
+                actions, source = self.decide_actions(frame)
                 for action in actions:
                     self.input.press(action.action, action.duration_ms)
                     time.sleep(0.03)
+
+                if source == "adaptive":
+                    after_frame = self.capture.grab()
+                    self.local_policy.observe_transition(frame, after_frame)
+
                 time.sleep(interval)
         except KeyboardInterrupt:
             LOGGER.info("Bot parado pelo utilizador (Ctrl+C).")

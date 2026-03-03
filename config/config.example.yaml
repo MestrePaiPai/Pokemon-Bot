@@ -35,7 +35,7 @@ ai:
 
 strategy:
   default_mode: "farm_xp"
-  use_ai_planner: true
+  use_ai_planner: false
   anti_stuck_enabled: true
   # Diferença média mínima entre frames (0-255). Menor = mais sensível.
   stuck_diff_threshold: 1.2
@@ -45,6 +45,14 @@ strategy:
   stuck_preview_size: [160, 90]
   # Quantas ações do fallback executar por loop.
   fallback_chunk_size: 2
+  # Política local que aprende com recompensa por mudança de frame.
+  local_learning_enabled: true
+  learning_rate: 0.25
+  exploration_rate: 0.35
+  exploration_decay: 0.995
+  exploration_min: 0.05
+  learning_action_duration_ms: 500
+  learning_actions: [LStickUp, LStickLeft, LStickRight, LStickDown, A, B]
   # Script de recuperação quando detectar encravamento.
   recovery_script:
     - action: B
