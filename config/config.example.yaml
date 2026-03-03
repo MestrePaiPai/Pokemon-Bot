@@ -1,0 +1,43 @@
+window_title: "Ryujinx"
+loop_interval_ms: 500
+capture:
+  monitor_index: 1
+
+actions:
+  A: z
+  B: x
+  X: c
+  Y: v
+  Plus: plus
+  Minus: minus
+  DpadUp: up
+  DpadDown: down
+  DpadLeft: left
+  DpadRight: right
+  LStickUp: w
+  LStickDown: s
+  LStickLeft: a
+  LStickRight: d
+  L: e
+  R: u
+  ZL: q
+  ZR: o
+
+ai:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  temperature: 0.1
+  max_tokens: 200
+
+strategy:
+  default_mode: "farm_xp"
+  use_ai_planner: true
+  fallback_script:
+    - action: LStickUp
+      duration_ms: 800
+    - action: A
+      duration_ms: 200
+    - action: LStickLeft
+      duration_ms: 600
+    - action: A
+      duration_ms: 200
