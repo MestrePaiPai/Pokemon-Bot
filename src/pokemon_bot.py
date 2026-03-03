@@ -81,6 +81,50 @@ class VisionHeuristics:
         return "overworld"
 
 
+class StuckDetector:
+    def __init__(self, config: dict[str, Any]) -> None:
+        strategy = config.get("strategy", {})
+        self.enabled = bool(strategy.get("anti_stuck_enabled", True))
+        self.diff_threshold = float(strategy.get("stuck_diff_threshold", 1.2))
+        self.max_still_frames = int(strategy.get("stuck_max_still_frames", 6))
+        self.preview_size = tuple(strategy.get("stuck_preview_size", [160, 90]))
+        self._prev_gray: np.ndarray | None = None
+        self._still_frames = 0
+
+    def _prepare(self, image: Image.Image) -> np.ndarray:
+        arr = np.array(image)
+        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        return cv2.resize(gray, self.preview_size, interpolation=cv2.INTER_AREA)
+
+    def is_stuck(self, image: Image.Image) -> bool:
+        if not self.enabled:
+            return False
+
+        current = self._prepare(image)
+        if self._prev_gray is None:
+            self._prev_gray = current
+            return False
+
+        diff = float(np.mean(cv2.absdiff(current, self._prev_gray)))
+        self._prev_gray = current
+
+        if diff < self.diff_threshold:
+            self._still_frames += 1
+        else:
+            self._still_frames = 0
+
+        if self._still_frames >= self.max_still_frames:
+            LOGGER.warning(
+                "Possível encravamento detectado (diff=%.3f, frames_parados=%s).",
+                diff,
+                self._still_frames,
+            )
+            self._still_frames = 0
+            return True
+
+        return False
+
+
 class AIPlanner:
     def __init__(self, config: dict[str, Any]) -> None:
         self.enabled = bool(config["strategy"].get("use_ai_planner", True))
@@ -159,8 +203,13 @@ class PokemonBot:
         self.capture = ScreenCapture(config["capture"]["monitor_index"])
         self.heuristics = VisionHeuristics()
         self.ai = AIPlanner(config)
+        self.stuck_detector = StuckDetector(config)
         self.mode = config["strategy"]["default_mode"]
         self.fallback = [PlannedAction(**step) for step in config["strategy"]["fallback_script"]]
+        recovery_script = config["strategy"].get("recovery_script", [{"action": "B", "duration_ms": 250}, {"action": "LStickDown", "duration_ms": 500}, {"action": "A", "duration_ms": 200}])
+        self.recovery = [PlannedAction(**step) for step in recovery_script]
+        self.fallback_chunk_size = int(config["strategy"].get("fallback_chunk_size", 2))
+        self.fallback_cursor = 0
 
     def focus_window(self, title: str) -> bool:
         matches = gw.getWindowsWithTitle(title)
@@ -175,7 +224,22 @@ class PokemonBot:
             LOGGER.warning("Não foi possível focar janela automaticamente: %s", exc)
         return True
 
+    def _next_fallback_actions(self) -> list[PlannedAction]:
+        if not self.fallback:
+            return [PlannedAction("A", 200)]
+
+        chunk = max(self.fallback_chunk_size, 1)
+        actions: list[PlannedAction] = []
+        for _ in range(chunk):
+            idx = self.fallback_cursor % len(self.fallback)
+            actions.append(self.fallback[idx])
+            self.fallback_cursor += 1
+        return actions
+
     def decide_actions(self, frame: Image.Image) -> list[PlannedAction]:
+        if self.stuck_detector.is_stuck(frame):
+            return self.recovery
+
         state = self.heuristics.classify_state(frame)
         LOGGER.info("Estado detectado: %s", state)
 
@@ -192,7 +256,7 @@ class PokemonBot:
             return [PlannedAction("A", 250), PlannedAction("A", 250)]
         if state == "menu":
             return [PlannedAction("B", 200), PlannedAction("B", 200)]
-        return self.fallback
+        return self._next_fallback_actions()
 
     def run(self) -> None:
         if not self.focus_window(self.config["window_title"]):

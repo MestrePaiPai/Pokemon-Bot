@@ -3,7 +3,8 @@
 Bot em Python para automatizar Pokémon no **Ryujinx** com:
 - captura de tela;
 - heurísticas simples de estado (overworld / battle / menu);
-- planner opcional com IA (OpenAI Vision) para decidir próximas ações.
+- planner opcional com IA (OpenAI Vision) para decidir próximas ações;
+- anti-stuck para detectar tela parada e executar recuperação automática.
 
 > ⚠️ Uso por sua conta e risco. Automação pode violar regras de alguns jogos/serviços.
 
@@ -62,6 +63,12 @@ OPENAI_API_KEY=sk-...
 
 > 🔒 Segurança: nunca publique sua chave no GitHub/chat. O projeto ignora `.env` automaticamente via `.gitignore`.
 
+4. Anti-stuck (recomendado manter ligado):
+   - `strategy.anti_stuck_enabled: true`
+   - `stuck_diff_threshold`: sensibilidade de detecção
+   - `stuck_max_still_frames`: quantos ciclos iguais antes de recuperar
+   - `recovery_script`: ações automáticas para destravar menu/tela
+
 ## Uso
 
 ```bash
@@ -77,7 +84,8 @@ python src/pokemon_bot.py --config config/config.yaml --log-level INFO
 1. Captura a tela do monitor definido.
 2. Classifica estado por visão computacional leve.
 3. Se IA estiver ativa, pede até 3 ações curtas para o modelo.
-4. Se IA falhar/desligada, usa fallback script + regras simples:
+4. Detecta encravamento por similaridade entre frames e executa `recovery_script` automaticamente.
+5. Se IA falhar/desligada, usa fallback script + regras simples:
    - `battle`: confirma com `A`
    - `menu`: volta com `B`
    - `overworld`: script de movimento configurado
@@ -143,3 +151,27 @@ strategy:
 ```
 
 Com isso o bot funciona só com as heurísticas/fallback (sem OpenAI).
+
+
+### Bot encrava com frequência
+
+Se o bot fica preso em menus/animações por muito tempo, ajuste no `config/config.yaml`:
+
+```yaml
+strategy:
+  anti_stuck_enabled: true
+  stuck_diff_threshold: 0.9      # mais sensível
+  stuck_max_still_frames: 4      # reage mais rápido
+  recovery_script:
+    - action: B
+      duration_ms: 250
+    - action: LStickDown
+      duration_ms: 500
+    - action: A
+      duration_ms: 200
+```
+
+Dicas rápidas:
+- diminua `stuck_diff_threshold` para detectar travamento mais cedo;
+- diminua `stuck_max_still_frames` para recuperar mais agressivamente;
+- personalize `recovery_script` para o jogo/cena onde encrava.

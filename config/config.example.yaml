@@ -32,6 +32,23 @@ ai:
 strategy:
   default_mode: "farm_xp"
   use_ai_planner: true
+  anti_stuck_enabled: true
+  # Diferença média mínima entre frames (0-255). Menor = mais sensível.
+  stuck_diff_threshold: 1.2
+  # Quantidade de loops quase idênticos antes de considerar travado.
+  stuck_max_still_frames: 6
+  # Tamanho usado para comparar frames (mais baixo = mais leve).
+  stuck_preview_size: [160, 90]
+  # Quantas ações do fallback executar por loop.
+  fallback_chunk_size: 2
+  # Script de recuperação quando detectar encravamento.
+  recovery_script:
+    - action: B
+      duration_ms: 250
+    - action: LStickDown
+      duration_ms: 500
+    - action: A
+      duration_ms: 200
   fallback_script:
     - action: LStickUp
       duration_ms: 800
