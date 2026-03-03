@@ -10,7 +10,7 @@ Bot em Python para automatizar Pokémon no **Ryujinx** com:
 ## Requisitos
 
 - Windows (recomendado para Ryujinx + `pydirectinput`)
-- Python 3.11+
+- Python 3.9+
 - Ryujinx aberto com o jogo Pokémon rodando
 - Mapeamento de teclas no Ryujinx compatível com o `config/config.yaml`
 
@@ -24,6 +24,18 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
+```
+
+Se aparecer erro de versão do `numpy`, confirme o Python com:
+
+```bash
+python --version
+```
+
+e atualize o `pip` antes de instalar:
+
+```bash
+python -m pip install --upgrade pip
 ```
 
 ## Configuração
